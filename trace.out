@@ -1,0 +1,62 @@
+Configuration:
+   fp adds and subs cycles:  4
+      fp multiplies cycles:  7
+         fp divides cycles: 12
+
+
+Instructions:
+  1. LW      R1,32(R6)
+  2. DADD    R4,R1,R7
+  3. SW      R5,16(R6)
+  4. DADD    R6,R1,R7
+  5. BEQ     R6,R2,L5:F
+  6. ADD.S   F12,F14,F16
+  7. ADD.S   F0,F2,F4
+  8. DIV.S   F6,F0,F8
+  9. CVT.S.W F2,F0
+ 10. MFC1    R6,F2
+ 11. SUB.S   F6,F14,F16
+
+
+cycle    IF    ID    EX   MEM    WB  FADD  FMUL  FDIV   FWB
+----- ----- ----- ----- ----- ----- ----- ----- ----- -----
+    1     1                                                
+    2     2     1                                          
+    3     3     2     1                                    
+    4 stall stall           1                              
+    5     4     3     2           1                        
+    6     5     4     3     2                              
+    7     6     5     4     3     2                        
+    8 stall stall           4                              
+    9     7     6                 4                        
+   10     8     7                       6                  
+   11 stall stall                       6                  
+   12 stall stall                       6                  
+   13 stall stall                       6                  
+   14     9     8                       7                 6
+   15 stall stall                       7                  
+   16 stall stall                       7                  
+   17 stall stall                       7                  
+   18    10     9                                   8     7
+   19    11    10     9                             8      
+   20          11    10     9                       8      
+   21                      10          11           8     9
+   22                            10    11           8      
+   23                                  11           8      
+   24                                  11           8      
+   25                                               8    11
+   26                                               8      
+   27                                               8      
+   28                                               8      
+   29                                               8      
+
+hazard type  cycles  % of stalls  % of total
+-----------  ------  -----------  ----------
+load-delay        1        12.50        3.45
+structural        3        37.50       10.34
+data              4        50.00       13.79
+-----------  ------  -----------  ----------
+total             8       100.00       27.59
+
+WAW squashes: 1
+branch flushes: 0

@@ -1,0 +1,4 @@
+LW      R6,34(R2)
+DADD    R5,R6,R4
+LW      R6,34(R2)
+DADD    R5,R4,R6
