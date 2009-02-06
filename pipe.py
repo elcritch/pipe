@@ -20,23 +20,26 @@ class Instruction:
         self.regs = regs
         self.id = Instruction.num = Instruction.num + 1
    
-        match_reg = re.match("^(\w{1}\d{1,2})$",regs[-1])
+        match_reg = re.match("^([A-Za-z]\d{1,2})$",regs[-1])
         match_const_reg = re.match("(-{0,1}[\w\d]+)\((\w+)\)",regs[-1])
-        match_const = re.match("((?:L\d+)|(?:\d+))",regs[-1])
+        match_const = re.match("((?:L\d+)|(?:\d+))$",regs[-1])
         match_branch = re.match("(\w+):([TF])",regs[-1])
 
-        print "matched", [ nm for nm in ['match_reg','match_const','match_const_reg','match_branch'] if locals()[nm] ], regs
+        print "matched", "%s"%regs[-1].ljust(10), [ nm for nm in ['match_reg','match_const','match_const_reg','match_branch'] if locals()[nm] ]
         if len(regs) == 1:
             if match_reg:      self.rs = regs[0]
             elif match_const:  self.imm = regs[0]
+            else: raise ValueError()
         elif len(regs) == 2:
             if match_reg:         self.rt = regs[1]
             elif match_const_reg: self.rt, self.imm = match_const_reg.groups()
+            else: raise ValueError()
             
         elif len(regs) == 3:
             if match_reg:      self.rd = regs[2]
             elif match_const:  self.imm = regs[2]
             elif match_branch: self.rd, self.branch = match_branch.groups()
+            else: raise ValueError()
         
     def __repr__(self):
         return "<CMD: %s ID: %d> "%(self.opcode, self.id)
