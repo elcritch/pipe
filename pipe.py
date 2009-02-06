@@ -9,7 +9,7 @@ PC = 0
 
 class Instruction:
     """implements a simple instruction"""
-    num = 0
+    num = -1
     def __init__(self, line):
         self.line = line.strip()
         
@@ -25,7 +25,6 @@ class Instruction:
         match_const = re.match("((?:L\d+)|(?:\d+))$",regs[-1])
         match_branch = re.match("(\w+):([TF])",regs[-1])
 
-        print "matched", "%s"%regs[-1].ljust(10), [ nm for nm in ['match_reg','match_const','match_const_reg','match_branch'] if locals()[nm] ]
         if len(regs) == 1:
             if match_reg:      self.rs = regs[0]
             elif match_const:  self.imm = regs[0]
@@ -63,6 +62,11 @@ class Latch:
             return self.attr[item]
         except KeyError:
             return None
+
+    def __repr__(self):
+        return "Stage: " + ''.join( [str(a) for a in self.attr] )
+    def __str__(self):
+        return self.__repr__()
     
     # def __setattr__(self, item, value):
     #     """Maps attributes to values.
@@ -81,31 +85,60 @@ IF_ID = Latch()
 ID_EX = Latch()
 EX_MEM = Latch()
 MEM_WB = Latch()
-Pipes = [ IF_ID, ID_EX, EX_MEM, MEM_WB ]
-
+PipeLine = [ IF_ID, ID_EX, EX_MEM, MEM_WB ]
+PipeLineNames = ['IF_ID','ID_EX','EX_MEM','MEM_WB']
 
 def main():
+    global PipeLine, PipeLineNames
     for line in sys.stdin.readlines():
         ist = Instruction(line)
         # print "inst", ist
         Mem.append(ist)
-    # Mem = inst
+    
     print "mem", Mem
     print "PC", PC
-    # stage_if()
-    
-def stage_if():
-    mem = Mem[PC] 
-    IF_ID.IR = mem
-    if EX_MEM.opcode.branch and EX_MEM.cond:
-        IF_ID.NPC = Mem['PC'] = EX_MEM.ALUOutput
-    else:
-        Mem['PC']=Mem['PC']+1
-    
-    print "IF_ID.IR", IF_ID.IR
-    
-    
 
+    print "Pipe PipeLine"
+    # iteratePipeLine()
+    stage_IF()
+    stage_ID()
+    stage_EX()
+    stage_MEM()
+    stage_WB()
+
+    for stage in PipeLine:
+        print stage
+    
+def stage_IF():
+    global Mem, PC # we must tell python they're global vars
+    IF_ID.IR = Mem[PC]
+    if hasattr(EX_MEM.opcode,'branch') and EX_MEM.cond:
+        IF_ID.NPC = PC = EX_MEM.ALUOutput
+        # TODO: book uses bitwise '&'?
+    else:
+        # we are referencing list index as memory addressess
+        IF_ID.NPC = PC = PC+1 
+
+def stage_ID():
+    pass
+    
+def stage_EX():
+    pass
+    
+def stage_MEM():
+    pass
+    
+def stage_WB():
+    pass
+    
+def iteratePipeLine():
+    """This function just passes along the Latch objects, setting up the new global latch names"""
+    global PipeLine
+    # get 4 first elements and add new Latch to beginning
+    PipeLine = [Latch()]+PipeLine[:-1]
+    # iterate over pipe names, setting the new value for it from the pipe array
+    for i, sn in enumerate(PipeLineNames):
+        globals()[sn] = PipeLine[i]
 
 if __name__ == '__main__':
     try:
