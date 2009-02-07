@@ -4,15 +4,10 @@
 ##files trace.dat
 import sys, os, re
 
-# Globals
-inst = []
-Mem = []
-PC = 0
-cycles = {}
 
 class Instruction:
     """implements a simple instruction"""
-    num = -1
+    num = 0
     def __init__(self, line):
         self.line = line.strip()
         
@@ -24,8 +19,9 @@ class Instruction:
         self.id = Instruction.num = Instruction.num + 1
         self.rs = self.rt = self.rd = None
         self.parse_options(regs)
+        self.settype(self.opcode)
     
-    def set_type(self,opcode):
+    def settype(self,opcode):
         """
         • loads and stores (LW, SW, L.S, and S.S) 
         • single cycle arithmetic operations (DADD, DSUB, AND, OR, XOR) 
@@ -90,7 +86,7 @@ class Instruction:
         return str(s)
 
 
-class Latch:
+class Stage:
     """
     This class stores the data in between Stage functions. Attributes
     in this class act as the temporary variables in the 'latches'. To simplify
@@ -125,13 +121,15 @@ class Latch:
         if self.IR: return self.attr['IR'].opcode
         else: return None
 
+# Globals
+inst = []
+Mem = []
+PC = 0
+cycles = {}
 
-IF_ID = Latch()
-ID_EX = Latch()
-EX_MEM = Latch()
-MEM_WB = Latch()
-PipeLine = [ IF_ID, ID_EX, EX_MEM, MEM_WB ]
-PipeLineNames = ['IF_ID','ID_EX','EX_MEM','MEM_WB']
+PipeLineNames = ['IF','ID','EX','MEM','WB']
+for i,nm in enumerate(PipeLineNames): globals()[nm] = i
+Pipe = [ Stage() for nm in PipeLineNames ]
 StageNames = [ 'stage_WB','stage_MEM','stage_EX','stage_ID','stage_IF',]
 
 header = """
@@ -140,7 +138,7 @@ cycle    IF    ID    EX   MEM    WB  FADD  FMUL  FDIV   FWB
 """
 
 def config():
-    global PipeLine, PipeLineNames, cycles
+    global Pipe, PipeLineNames, cycles
     fl = open('config.txt','r')
     for dat in fl.readlines():
         op, cy = [ s.strip() for s in dat.split(':') ]
@@ -152,90 +150,71 @@ def config():
         # print "inst", ist
         Mem.append(ist)
     
-def reset(name):
-    latch = Latch()
-    globals()[name] = latch
-    PipeLine[PipeLineNames.index(name)] = latch
-
+def print_cycle():
+    # DEBUG print out
+    # print " ========================== Cycle =========================="
+    # for i,stage in enumerate(Pipe):
+        # print PipeLineNames[i].ljust(7), stage
+    
+    # Print out line of cycles
+    output = str(CYCLE).rjust(5)
+    for stage in Pipe:
+        output += ' '+str(stage.IR.id).rjust(5) if stage.IR else ' '*6
+        
+    print output
+    
 def main():
-    global PipeLine, PipeLineNames
+    global Pipe, PipeLineNames, CYCLE
     config()
+    
     print "mem", Mem
     print "PC", PC
     print
-    print "PipeLine"
+    print "Pipe"
+    print header,
     
-    # iteratePipeLine() # we just copy the values?
-    for i,inst in enumerate(Mem):
-        for stage in StageNames: globals()[stage]()
-        
-        print " ========================== Cycle =========================="
-        for i,stage in enumerate(PipeLine):
-            print PipeLineNames[i].ljust(7), stage
-        
-        output = str(PC).rjust(5)
-        for name in PipeLineNames:
-            stage = globals()[name]
-            output += ' '+str(stage.IR.id).rjust(5) if stage.IR else ' '*5
-        print header,
-        print output
+    loop = True
+    CYCLE = 0
     
+    while loop:
+        # This shifts the array down, creating an empty stage for IF
+        iteratePipeLine()    
+        # call function for each stage
+        for stage in StageNames:
+            globals()[stage]() 
 
+        # keep looping while we have commands in the stages
+        loop = True in [ True for stage in Pipe if stage.IR ]
+        CYCLE += 1        
+        
+        if loop: print_cycle()
 
 def stage_IF():
-    global Mem, PC, IF_ID # we must tell python they're global vars
-    reset('IF_ID')
-    IF_ID.IR = Mem[PC]
-    PC = PC+1
-    if hasattr(EX_MEM.opcode,'branch') and EX_MEM.cond:
-        IF_ID.NPC = EX_MEM.ALUOutput
-        # TODO: book uses bitwise '&'?
-    else:
-        # we are referencing list index as memory addressess
-        IF_ID.NPC = PC+1 
-
+    global Mem, PC
+    Pipe[IF].IR = Mem[PC] if PC < len(Mem) else None
+    PC = PC + 1
+    
 def stage_ID():
-    reset('ID_EX')
-    if ID_EX.IR:
-        ID_EX.A = IF_ID.IR.rs
-        ID_EX.B = IF_ID.IR.rt
-        ID_EX.Imm = IF_ID.IR.imm
-    ID_EX.NPC = IF_ID.NPC
-    ID_EX.IR = IF_ID.IR
+    pass
     
 def stage_EX():
-    reset('EX_MEM')
-    if ID_EX.opcode() in ('load', 'store'):
-        EX_MEM.IR = ID_EX.IR
-        EX_MEM.ALUOutput = ""
-        EX_MEM.B = ID_EX.B
-    elif ID_EX.opcode() == 'branch':
-        EX_MEM.ALUOutput =  ID_EX.NPC + int(ID_EX.Imm) << 2
-        EX_MEM.cond = ID_EX.A == None
-    elif hasattr(ID_EX,'IR'):
-        EX_MEM.IR = ID_EX.IR
-        EX_MEM.ALUOutput = ""
-    else: raise "ERROR"
-        
+    if Pipe[EX].opcode() == 'load':
+        pass # TODO: stall?
+    elif Pipe[EX].opcode() == 'store':
+        pass
+    elif Pipe[EX].opcode() == 'branch':
+        pass
+        # TODO: branch logic control? Shouldn't this be in ID?
+        # EX_MEM.cond = ID_EX.A == None
+    elif Pipe[ID].IR:
+        pass
+    else: pass
     
 def stage_MEM():
-    reset('MEM_WB')
-    if EX_MEM.opcode() in ('load', 'store'):
-        MEM_WB.IR = EX_MEM.IR
-    elif hasattr(EX_MEM,'IR'):
-        MEM_WB.IR = EX_MEM.IR
-        MEM_WB.ALUOutput = EX_MEM.ALUOutput
-    else:
-        pass
+    pass
     
 def stage_WB():
-    
-    if MEM_WB.opcode() in ('load', 'store'):
-        pass
-    elif hasattr(ID_EX,'IR'):
-        pass
-    else: 
-        raise "ERROR"
+    pass
     
 def iteratePipeLine():
     """
@@ -243,13 +222,9 @@ def iteratePipeLine():
     the new global latch names from the pipes. A bit of a hack, but it makes
     copying the book easier.
     """
-    global PipeLine
-    # get 4 first elements and add new Latch to beginning
-    PipeLine = [Latch()]+PipeLine[:-1]
-    # iterate over pipe names, setting the new value for it from the pipe array
-    for i, sn in enumerate(PipeLineNames):
-        globals()[sn] = PipeLine[i]
-
+    # Make new pipeline stage
+    Pipe.insert(0,Stage())
+    Pipe.pop(-1)
 
 
 if __name__ == '__main__':
