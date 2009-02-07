@@ -50,35 +50,37 @@ class Instruction:
 
 
 class Latch:
+    """
+    This class stores the data in between Stage functions. Attributes
+    in this class act as the temporary variables in the 'latches'. To simplify
+    programming, this class returns 'None' whenever an attribute hasn't been
+    stored. 
+    """
     def __init__(self):
-        """docstring for __init__"""
-        self.attr = {}
+        self.__dict__['attr'] = {}
         
     def __getattr__(self, item):
-        """Maps values to attributes.
-        Only called if there *isn't* an attribute with this name
-        """
-        try:
-            return self.attr[item]
-        except KeyError:
+        """this is called if the attribute isn't found in the object"""
+        if self.attr.has_key(item):
+            return self.attr[item] # we store all new additions in attr dict
+        else:
             return None
+            
+    def __setattr__(self, item, value):
+        """overrides accessing object attributes"""
+        if self.__dict__.has_key(item): # normal attributes are handled normally
+            dict.__dict__[item] = value
+        else:
+            self.attr[item] = value
 
     def __repr__(self):
-        return "Stage: " + ''.join( [str(a) for a in self.attr] )
+        s = "Stage: "
+        for n in self.attr:
+            s+= "'%s':%s"%(n,self.attr[n].__repr__())
+        return s
     def __str__(self):
         return self.__repr__()
     
-    # def __setattr__(self, item, value):
-    #     """Maps attributes to values.
-    #     Only if we are initialised
-    #     """
-    #     # this test allows attributes to be set in the __init__ method
-    #     if not self.__dict__.has_key('_attrExample__initialised'):  
-    #         return dict.__setattr__(self, item, value)
-    #     elif self.__dict__.has_key(item):       # any normal attributes are handled normally
-    #         dict.__setattr__(self, item, value)
-    #     else:
-    #         self.__setitem__(item, value)
 
 
 IF_ID = Latch()
@@ -97,7 +99,7 @@ def main():
     
     print "mem", Mem
     print "PC", PC
-
+    print
     print "Pipe PipeLine"
     # iteratePipeLine()
     stage_IF()
@@ -106,8 +108,8 @@ def main():
     stage_MEM()
     stage_WB()
 
-    for stage in PipeLine:
-        print stage
+    for i,stage in enumerate(PipeLine):
+        print PipeLineNames[i].ljust(6),stage
     
 def stage_IF():
     global Mem, PC # we must tell python they're global vars
@@ -132,7 +134,11 @@ def stage_WB():
     pass
     
 def iteratePipeLine():
-    """This function just passes along the Latch objects, setting up the new global latch names"""
+    """
+    This function just passes along the Latch objects, setting up 
+    the new global latch names from the pipes. A bit of a hack, but it makes
+    copying the book easier.
+    """
     global PipeLine
     # get 4 first elements and add new Latch to beginning
     PipeLine = [Latch()]+PipeLine[:-1]
@@ -140,7 +146,10 @@ def iteratePipeLine():
     for i, sn in enumerate(PipeLineNames):
         globals()[sn] = PipeLine[i]
 
+
+
 if __name__ == '__main__':
+    """ Runs the program. If we don't parse the input we throw an error."""
     try:
         main()
     except (ValueError), exc:
