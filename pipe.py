@@ -94,25 +94,27 @@ class Instruction:
         match_const_reg = re.match("(-{0,1}[\w\d]+)\((\w+)\)",regs[-1])
         match_const = re.match("((?:L\d+)|(?:\d+))$",regs[-1])
         match_branch = re.match("(\w+):([TF])",regs[-1])
-        # R opcode (6)  rs (5)  rt (5)  rd (5)  shamt (5)   funct (6)
-        # I opcode (6)  rs (5)  rt (5)  immediate (16)
-        # J opcode (6)  address (26)
+        # Assembly Comment 
+        # add # op = 0, shamt= 0, funct= 32 
+        # $t0 # rd = 8 
+        # $s1 # rs= 17 
+        # $s2 # rt= 18 
         if len(regs) == 1:
-            if match_reg:      self.rs = regs[0]
+            if match_reg:      self.rd = regs[0]
             elif match_const:  self.imm = regs[0]
             else: raise ValueError()
         elif len(regs) == 2:
-            self.rs = regs[0]
-            if match_reg:         self.rt = regs[1]
-            elif match_const_reg: self.rt, self.imm = match_const_reg.groups()
+            self.rt = regs[0]
+            if match_reg:         self.rs = regs[1]
+            elif match_const_reg: self.imm, self.rs = match_const_reg.groups()
             else: raise ValueError()
             
         elif len(regs) == 3:
-            self.rs = regs[0]
-            self.rt = regs[1]
-            if match_reg:      self.rd = regs[2]
+            self.rd = regs[0]
+            self.rs = regs[1]
+            if match_reg:      self.rt = regs[2]
             elif match_const:  self.imm = regs[2]
-            elif match_branch: self.rd, self.branch = match_branch.groups()
+            elif match_branch: self.rt, self.branch = match_branch.groups()
             else: raise ValueError()
         
     def __repr__(self):
@@ -129,6 +131,7 @@ inst = []
 Mem = []
 PC = 0
 cycles = {}
+STALLS = []
 
 ## Setup Pipe/Stage names as index numbers
 PipeLineNames = ['IF','ID','EX','MEM','WB']
@@ -154,7 +157,6 @@ def config():
     
     for line in sys.stdin.readlines():
         ist = Instruction(line)
-        # print "inst", ist
         Mem.append(ist)
 
 OUTPUT = ""
@@ -203,11 +205,17 @@ def main():
     print header,
     print OUTPUT
 
-
+def stall(cycles):
+    """This sets up the function to stall for a given number of cycles"""
+    stalls = [ Stage() for i in range(cycles)]
+    for stall in stalls: stall.IR = 'stall'
+    STALLS.extend(stalls)
+    
 def stage_IF():
     global Mem, PC
-    Pipe[IF].IR = Mem[PC] if PC < len(Mem) else None
-    PC = PC + 1
+    if not Pipe[IF].IR == 'stall':
+        Pipe[IF].IR = Mem[PC] if PC < len(Mem) else None
+        PC = PC + 1
     
 def stage_ID():
     pass
@@ -217,12 +225,12 @@ def stage_EX():
     irtype = Pipe[EX].type
     if irtype == 'load':
         print 'load', Pipe[EX]
-        if Pipe[EX].rt == Pipe[ID].rs:
-            print "Found LD Error!"
-        elif Pipe[EX].rt == Pipe[ID].rt:
-            print "Found LD Error!"
-        elif Pipe[EX].rt == Pipe[ID].rs:
-            print "Found LD Error!"
+        print "Pipe[EX]:%s"%Pipe[EX].IR
+        print "Pipe[ID]:%s"%Pipe[ID].IR
+        if (Pipe[EX].rt == Pipe[ID].rs) or \
+           (Pipe[EX].rt == Pipe[ID].rt) or \
+           (Pipe[EX].rt == Pipe[ID].rs):
+            stall(cycles=1)
             
     elif irtype == 'store':
         pass
@@ -247,7 +255,11 @@ def iteratePipeLine():
     copying the book easier.
     """
     # Make new pipeline stage
-    Pipe.insert(0,Stage())
+    if STALLS:
+        Pipe.insert(0,STALLS.pop())
+    else:
+        Pipe.insert(0,Stage())
+    
     Pipe.pop(-1)
 
 
