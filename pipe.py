@@ -21,7 +21,7 @@ class Instruction:
         self.parse_options(regs)
         self.settype(self.opcode)
     
-    def settype(self,opcode):
+    def setkind(self,opcode):
         """
         • loads and stores (LW, SW, L.S, and S.S) 
         • single cycle arithmetic operations (DADD, DSUB, AND, OR, XOR) 
@@ -198,11 +198,13 @@ def stage_ID():
     pass
     
 def stage_EX():
-    if Pipe[EX].opcode() == 'load':
-        pass # TODO: stall?
-    elif Pipe[EX].opcode() == 'store':
+    opcode = Pipe[EX].opcode()
+    irtype = Pipe[EX].IR.type if Pipe[EX].IR else ''
+    if irtype == 'load' and :
+        Pip
+    elif irtype == 'store':
         pass
-    elif Pipe[EX].opcode() == 'branch':
+    elif irtype == 'branch':
         pass
         # TODO: branch logic control? Shouldn't this be in ID?
         # EX_MEM.cond = ID_EX.A == None
