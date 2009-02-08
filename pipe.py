@@ -4,6 +4,44 @@
 ##files trace.dat
 import sys, os, re
 
+class Stage:
+    """
+    This class stores the data in between Stage functions. Attributes
+    in this class act as the temporary variables in the 'latches'. To simplify
+    programming, this class returns 'None' whenever an attribute hasn't been
+    stored. 
+    """
+    def __init__(self):
+        self.__dict__['attr'] = {}
+        
+    def __getattr__(self, item):
+        """this is called if the attribute isn't found in the object"""
+        if self.attr.has_key(item):
+            return self.attr[item] # we store all new additions in attr dict
+        elif hasattr(self.attr.get('IR'),item):
+            return self.attr.get('IR')
+        else:
+            return None
+            
+    def __setattr__(self, item, value):
+        """overrides accessing object attributes"""
+        if self.__dict__.has_key(item): # normal attributes are handled normally
+            dict.__dict__[item] = value
+        else:
+            self.attr[item] = value
+
+    def __repr__(self):
+        s = "Stage: "
+        for n in self.attr:
+            s+= "%s:%s "%(n,self.attr[n].__repr__())
+        return s
+    def __str__(self):
+        return self.__repr__()
+    def opcode(self):
+        if self.IR: return self.attr['IR'].opcode
+        else: return None
+    def __nonzero__(self):
+        return True if self.attr.has_key('IR') else False
 
 class Instruction:
     """implements a simple instruction"""
@@ -17,11 +55,11 @@ class Instruction:
         regs = ''.join(line[1:]).split(',')
         self.regs = regs
         self.id = Instruction.num = Instruction.num + 1
-        self.rs = self.rt = self.rd = None
+        self.rs = self.rt = self.rd = self.imm = None
         self.parse_options(regs)
         self.settype(self.opcode)
     
-    def setkind(self,opcode):
+    def settype(self,opcode):
         """
         • loads and stores (LW, SW, L.S, and S.S) 
         • single cycle arithmetic operations (DADD, DSUB, AND, OR, XOR) 
@@ -78,48 +116,13 @@ class Instruction:
             else: raise ValueError()
         
     def __repr__(self):
-        return "<CMD: %s ID: %d> "%(self.opcode, self.id)
+        return "<CMD:%s ID:%s RS:%s RT:%s RD:%s IMM:%s> "%\
+            (self.opcode, self.id, self.rs, self.rt, self.rd, self.imm)
     def __str__(self):
         attrs = [ nm for nm in dir(self) if not nm.startswith("_")]
         s = "INST:\n"
         s += ''.join([ '\t%s:\t%s\n'%(a,getattr(self,a)) for a in attrs])
         return str(s)
-
-
-class Stage:
-    """
-    This class stores the data in between Stage functions. Attributes
-    in this class act as the temporary variables in the 'latches'. To simplify
-    programming, this class returns 'None' whenever an attribute hasn't been
-    stored. 
-    """
-    def __init__(self):
-        self.__dict__['attr'] = {}
-        
-    def __getattr__(self, item):
-        """this is called if the attribute isn't found in the object"""
-        if self.attr.has_key(item):
-            return self.attr[item] # we store all new additions in attr dict
-        else:
-            return None
-            
-    def __setattr__(self, item, value):
-        """overrides accessing object attributes"""
-        if self.__dict__.has_key(item): # normal attributes are handled normally
-            dict.__dict__[item] = value
-        else:
-            self.attr[item] = value
-
-    def __repr__(self):
-        s = "Stage: "
-        for n in self.attr:
-            s+= "%s:%s "%(n,self.attr[n].__repr__())
-        return s
-    def __str__(self):
-        return self.__repr__()
-    def opcode(self):
-        if self.IR: return self.attr['IR'].opcode
-        else: return None
 
 # Globals
 inst = []
@@ -127,11 +130,15 @@ Mem = []
 PC = 0
 cycles = {}
 
+## Setup Pipe/Stage names as index numbers
 PipeLineNames = ['IF','ID','EX','MEM','WB']
 for i,nm in enumerate(PipeLineNames): globals()[nm] = i
+
+## Instantiate Pipe
 Pipe = [ Stage() for nm in PipeLineNames ]
 StageNames = [ 'stage_WB','stage_MEM','stage_EX','stage_ID','stage_IF',]
 
+## Printout header
 header = """
 cycle    IF    ID    EX   MEM    WB  FADD  FMUL  FDIV   FWB
 ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
@@ -149,19 +156,22 @@ def config():
         ist = Instruction(line)
         # print "inst", ist
         Mem.append(ist)
-    
+
+OUTPUT = ""
 def print_cycle():
+    global OUTPUT
     # DEBUG print out
     # print " ========================== Cycle =========================="
     # for i,stage in enumerate(Pipe):
         # print PipeLineNames[i].ljust(7), stage
     
     # Print out line of cycles
-    output = str(CYCLE).rjust(5)
+    OUTPUT += str(CYCLE).rjust(5)
     for stage in Pipe:
-        output += ' '+str(stage.IR.id).rjust(5) if stage.IR else ' '*6
-        
-    print output
+        OUTPUT += ' '+str(stage.IR.id).rjust(5) if stage.IR else ' '*6
+    
+    OUTPUT += '\n'
+    # print OUTPUT
     
 def main():
     global Pipe, PipeLineNames, CYCLE
@@ -173,21 +183,29 @@ def main():
     print "Pipe"
     print header,
     
+    s = Stage()
+    if s: print "STAGE"
+    else: print "NULL STAGE"
+    
     loop = True
     CYCLE = 0
     
     while loop:
         # This shifts the array down, creating an empty stage for IF
-        iteratePipeLine()    
+        iteratePipeLine()
+        
         # call function for each stage
         for stage in StageNames:
             globals()[stage]() 
-
+            
         # keep looping while we have commands in the stages
         loop = True in [ True for stage in Pipe if stage.IR ]
         CYCLE += 1        
         
         if loop: print_cycle()
+    
+    print OUTPUT
+
 
 def stage_IF():
     global Mem, PC
@@ -195,13 +213,17 @@ def stage_IF():
     PC = PC + 1
     
 def stage_ID():
-    pass
-    
-def stage_EX():
-    opcode = Pipe[EX].opcode()
-    irtype = Pipe[EX].IR.type if Pipe[EX].IR else ''
-    if irtype == 'load' and :
-        Pip
+    opcode = Pipe[EX].opcode
+    irtype = Pipe[EX].type
+    if irtype == 'load':
+        print 'load'
+        if Pipe[ID].rt == Pipe[IF].rs:
+            print "Found LD Error!"
+        elif Pipe[ID].rt == Pipe[IF].rt:
+            print "Found LD Error!"
+        elif Pipe[ID].rt == Pipe[IF].rs:
+            print "Found LD Error!"
+            
     elif irtype == 'store':
         pass
     elif irtype == 'branch':
@@ -211,6 +233,9 @@ def stage_EX():
     elif Pipe[ID].IR:
         pass
     else: pass
+    
+def stage_EX():
+    pass
     
 def stage_MEM():
     pass
