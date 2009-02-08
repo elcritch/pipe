@@ -18,15 +18,15 @@ class Stage:
         """this is called if the attribute isn't found in the object"""
         if self.attr.has_key(item):
             return self.attr[item] # we store all new additions in attr dict
-        elif hasattr(self.attr.get('IR'),item):
-            return self.attr.get('IR')
+        elif self.attr.has_key('IR') and hasattr(self.attr['IR'],item):
+            return getattr(self.attr['IR'],item)
         else:
             return None
             
     def __setattr__(self, item, value):
         """overrides accessing object attributes"""
         if self.__dict__.has_key(item): # normal attributes are handled normally
-            dict.__dict__[item] = value
+            self.__dict__[item] = value
         else:
             self.attr[item] = value
 
@@ -37,9 +37,9 @@ class Stage:
         return s
     def __str__(self):
         return self.__repr__()
-    def opcode(self):
-        if self.IR: return self.attr['IR'].opcode
-        else: return None
+    # def opcode(self):
+        # if self.IR: return self.attr['IR'].opcode
+        # else: return None
     def __nonzero__(self):
         return True if self.attr.has_key('IR') else False
 
@@ -136,7 +136,7 @@ for i,nm in enumerate(PipeLineNames): globals()[nm] = i
 
 ## Instantiate Pipe
 Pipe = [ Stage() for nm in PipeLineNames ]
-StageNames = [ 'stage_WB','stage_MEM','stage_EX','stage_ID','stage_IF',]
+StageNames = [ 'stage_IF','stage_ID','stage_EX','stage_MEM','stage_WB',]
 
 ## Printout header
 header = """
@@ -176,13 +176,7 @@ def print_cycle():
 def main():
     global Pipe, PipeLineNames, CYCLE
     config()
-    
-    print "mem", Mem
-    print "PC", PC
-    print
-    print "Pipe"
-    print header,
-    
+        
     s = Stage()
     if s: print "STAGE"
     else: print "NULL STAGE"
@@ -196,7 +190,7 @@ def main():
         
         # call function for each stage
         for stage in StageNames:
-            globals()[stage]() 
+            globals()[stage]()
             
         # keep looping while we have commands in the stages
         loop = True in [ True for stage in Pipe if stage.IR ]
@@ -204,6 +198,9 @@ def main():
         
         if loop: print_cycle()
     
+    print "mem", Mem
+    print "Pipe"
+    print header,
     print OUTPUT
 
 
@@ -213,15 +210,18 @@ def stage_IF():
     PC = PC + 1
     
 def stage_ID():
+    pass
+    
+def stage_EX():
     opcode = Pipe[EX].opcode
     irtype = Pipe[EX].type
     if irtype == 'load':
-        print 'load'
-        if Pipe[ID].rt == Pipe[IF].rs:
+        print 'load', Pipe[EX]
+        if Pipe[EX].rt == Pipe[ID].rs:
             print "Found LD Error!"
-        elif Pipe[ID].rt == Pipe[IF].rt:
+        elif Pipe[EX].rt == Pipe[ID].rt:
             print "Found LD Error!"
-        elif Pipe[ID].rt == Pipe[IF].rs:
+        elif Pipe[EX].rt == Pipe[ID].rs:
             print "Found LD Error!"
             
     elif irtype == 'store':
@@ -233,9 +233,6 @@ def stage_ID():
     elif Pipe[ID].IR:
         pass
     else: pass
-    
-def stage_EX():
-    pass
     
 def stage_MEM():
     pass
