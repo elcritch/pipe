@@ -156,6 +156,7 @@ def config():
         CONFIG[op] = int(cy)
     fl.close()
     
+    # Readin all the instructions
     for line in sys.stdin.readlines():
         ist = Instruction(line)
         Mem.append(ist)
@@ -180,18 +181,12 @@ def main():
     global Pipe, PipeLineNames, CYCLE
     config()
         
-    s = Stage()
-    if s: print "STAGE"
-    else: print "NULL STAGE"
-    
     loop = True
     while loop:
-        # This shifts the array down, creates empty stage for IF, stalls
-        # call function for each stage
-        iteratePipeLine()
-        controller()
+        iteratePipeLine() # This shifts Stages down Pipeline, empty IF
+        controller() # stalls
         for stage in StageNames:
-            globals()[stage]()
+            globals()[stage]() # call function for each stage
             
         # keep looping while we have commands in the stages
         loop = True in [ True for stage in Pipe if stage.IR ]
@@ -225,7 +220,7 @@ def stage_EX():
         if (Pipe[EX].rt == Pipe[ID].rs) or \
            (Pipe[EX].rt == Pipe[ID].rt) or \
            (Pipe[EX].rt == Pipe[ID].rs):
-            set_stall(cycles=1,stage=EX)
+            set_stall(cycles=2,stage=EX)
             
     elif irtype == 'store':
         pass
@@ -256,27 +251,27 @@ def controller():
         
         class Stall(Stage): pass
         
+        Pipe[0:stall['stage']] = Pipe[1:stall['stage']+1]
+        blank = Stage()
+        blank.IR = Stall()
+        blank.IR.stall = True
+        blank.IR.id = ''
+        Pipe[stall['stage']] = blank
+        
+        PC -= 1
+        
         if not stall.has_key('stalled'):
-            Pipe[0:stall['stage']] = Pipe[1:stall['stage']+1]
-            blank = Stage()
-            blank.IR = Stall()
-            blank.IR.stall = True
-            blank.IR.id = ''
-            Pipe[stall['stage']] = blank
             
-            print "stall", stall
-            PC -= stall['cycles']
             # add these to the stall list, so we can reset them? 
             stall['stalled'] = [ Pipe[i] for i in xrange(stall['stage'])  ]            
             for i in xrange(stall['stage']):
-                print "i", i
                 Pipe[i].IR._id = Pipe[i].IR.id
                 Pipe[i].IR.id = 'stall'
-            
+        else:
+            print "stall", stall['stalled']
         
         if stall['cycles'] == 0:
             print "popping cycles"
-            print stall['stalled']
             # restore the names
             for st in stall['stalled']:
                 print "st.IR.id", st.IR.id
