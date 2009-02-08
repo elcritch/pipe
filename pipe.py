@@ -130,7 +130,8 @@ class Instruction:
 inst = []
 Mem = []
 PC = 0
-cycles = {}
+CYCLE = 0
+CONFIG = {}
 STALLS = []
 
 ## Setup Pipe/Stage names as index numbers
@@ -148,11 +149,11 @@ cycle    IF    ID    EX   MEM    WB  FADD  FMUL  FDIV   FWB
 """
 
 def config():
-    global Pipe, PipeLineNames, cycles
+    global Pipe, PipeLineNames, CONFIG
     fl = open('config.txt','r')
     for dat in fl.readlines():
         op, cy = [ s.strip() for s in dat.split(':') ]
-        cycles[op] = int(cy)
+        CONFIG[op] = int(cy)
     fl.close()
     
     for line in sys.stdin.readlines():
@@ -184,13 +185,11 @@ def main():
     else: print "NULL STAGE"
     
     loop = True
-    CYCLE = 0
-    
     while loop:
-        # This shifts the array down, creating an empty stage for IF
-        iteratePipeLine()
-        
+        # This shifts the array down, creates empty stage for IF, stalls
         # call function for each stage
+        iteratePipeLine()
+        controller()
         for stage in StageNames:
             globals()[stage]()
             
@@ -200,17 +199,16 @@ def main():
         
         if loop: print_cycle()
     
-    print "mem", Mem
+    # print "mem", Mem
     print "Pipe"
     print header,
     print OUTPUT
 
-def stall(cycles):
-    """This sets up the function to stall for a given number of cycles"""
-    stalls = [ Stage() for i in range(cycles)]
-    for stall in stalls: stall.IR = 'stall'
-    STALLS.extend(stalls)
-    
+def set_stall(cycles,stage):
+    # add a new stall state to the global STALLS list
+    # iteratePipeLine takes care of implementing stalls
+    STALLS.append({'cycles':cycles,'stage':stage})
+     
 def stage_IF():
     global Mem, PC
     if not Pipe[IF].IR == 'stall':
@@ -224,13 +222,10 @@ def stage_EX():
     opcode = Pipe[EX].opcode
     irtype = Pipe[EX].type
     if irtype == 'load':
-        print 'load', Pipe[EX]
-        print "Pipe[EX]:%s"%Pipe[EX].IR
-        print "Pipe[ID]:%s"%Pipe[ID].IR
         if (Pipe[EX].rt == Pipe[ID].rs) or \
            (Pipe[EX].rt == Pipe[ID].rt) or \
            (Pipe[EX].rt == Pipe[ID].rs):
-            stall(cycles=1)
+            set_stall(cycles=1,stage=EX)
             
     elif irtype == 'store':
         pass
@@ -248,19 +243,54 @@ def stage_MEM():
 def stage_WB():
     pass
     
-def iteratePipeLine():
+def controller():
     """
     This function just passes along the Latch objects, setting up 
     the new global latch names from the pipes. A bit of a hack, but it makes
     copying the book easier.
     """
-    # Make new pipeline stage
-    if STALLS:
-        Pipe.insert(0,STALLS.pop())
-    else:
-        Pipe.insert(0,Stage())
+    global PC
     
+    if STALLS:
+        stall = STALLS[-1]
+        
+        class Stall(Stage): pass
+        
+        if not stall.has_key('stalled'):
+            Pipe[0:stall['stage']] = Pipe[1:stall['stage']+1]
+            blank = Stage()
+            blank.IR = Stall()
+            blank.IR.stall = True
+            blank.IR.id = ''
+            Pipe[stall['stage']] = blank
+            
+            print "stall", stall
+            PC -= stall['cycles']
+            # add these to the stall list, so we can reset them? 
+            stall['stalled'] = [ Pipe[i] for i in xrange(stall['stage'])  ]            
+            for i in xrange(stall['stage']):
+                print "i", i
+                Pipe[i].IR._id = Pipe[i].IR.id
+                Pipe[i].IR.id = 'stall'
+            
+        
+        if stall['cycles'] == 0:
+            print "popping cycles"
+            print stall['stalled']
+            # restore the names
+            for st in stall['stalled']:
+                print "st.IR.id", st.IR.id
+                print "st.IR._id", st.IR._id
+                st.IR.id = st.IR._id 
+            STALLS.pop(-1)
+        else:
+            stall['cycles'] -= 1
+        
+def iteratePipeLine():
+    # Make new pipeline stage
+    Pipe.insert(0,Stage())    
     Pipe.pop(-1)
+
 
 
 if __name__ == '__main__':
